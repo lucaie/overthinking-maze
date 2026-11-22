@@ -12,7 +12,7 @@
    PICTURE: the maze board itself, large, at the top
    COLOUR and TYPE: deep sea ground, sky for gains, signal pink for losses and the clock; Hanken Grotesk
    LAYOUT: one column: status strip, timer bar, board, controls; summary + data at the end */
-:root{color-scheme:light dark;--bg:#0a2540;--panel:#0f3157;--line:#285079;--ink:#ffffff;--soft:#b9cde3;--sky:#8fd3ff;--pink:#ff5c8a;--node:#163d66}
+:root{color-scheme:light dark;--bg:#0a2540;--panel:#0f3157;--line:#285079;--ink:#ffffff;--soft:#b9cde3;--sky:#8fd3ff;--pink:#ff5c8a;--red:#ff3b3b;--node:#163d66}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Hanken Grotesk",system-ui,sans-serif;overflow-x:clip}
@@ -44,6 +44,8 @@ th:first-child,td:first-child{text-align:left}th{color:var(--soft);font-weight:4
 textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;font:13px/1.4 ui-monospace,monospace;padding:10px}
 .note{font-size:13px;color:var(--soft)}.hide{display:none}
 @media (prefers-reduced-motion:no-preference){.flip{animation:f .25s ease-out;transform-box:fill-box;transform-origin:center}@keyframes f{from{transform:scale(.6);opacity:.2}}}
+.pop{fill:var(--red);font-weight:700;font-size:18px;pointer-events:none;paint-order:stroke;stroke:#0a2540;stroke-width:3px}
+@media (prefers-reduced-motion:no-preference){.pop{animation:up .9s ease-out forwards;transform-box:fill-box}@keyframes up{to{transform:translateY(-26px);opacity:0}}}
 @media(max-width:600px){table{font-size:13px}}
 </style>
 </head>
@@ -181,11 +183,14 @@ function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CF
 
 svg.addEventListener('click',e=>{
   const g=e.target.closest('g[data-p]');if(!g)return;const n=g.dataset.p,i=+g.dataset.i,p=T.paths[n];
-  if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());render();status()}
+  if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());render();status();pop(p.cells[i],T.cost)}
   else if(phase==='choose'){T.chosen=n;T.tChoice=performance.now();startHide()}
 });
 svg.addEventListener('mousemove',e=>{if(phase!=='choose')return;const g=e.target.closest('g[data-p]');render(g?g.dataset.p:null)});
 
+function pop(c,cost){const [x,y]=px(c),t=document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x',x+14);t.setAttribute('y',y-14);t.setAttribute('class','pop');t.textContent='\u2212'+cost;svg.appendChild(t);
+  timers.push(setTimeout(()=>t.remove(),900))}
 function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();$('doneBtn').disabled=true;render()}
 $('doneBtn').onclick=()=>{if(phase!=='plan')return;toChoose();msg.textContent='Click any stop on the path you want.'};
 
