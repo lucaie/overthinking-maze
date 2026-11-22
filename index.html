@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mouselab Memory Maze</title>
+<title>Memory Maze v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-/* VOICE: calm lab instrument, a little playful — it's a game you play on yourself
-   IDEA: a planning board: hidden tiles you pay to flip, then a blank sheet to walk from memory
+/* VOICE: calm lab instrument, a little playful — a game you play on yourself
+   IDEA: a planning board: hidden stops you pay to flip, then a blank sheet to walk from memory
    PICTURE: the maze board itself, large, at the top
-   COLOUR and TYPE: deep sea ground, sky for revealed gains, signal pink for losses; Hanken Grotesk
-   LAYOUT: one column: status strip, board, controls; summary + data at the end */
+   COLOUR and TYPE: deep sea ground, sky for gains, signal pink for losses and the clock; Hanken Grotesk
+   LAYOUT: one column: status strip, timer bar, board, controls; summary + data at the end */
 :root{color-scheme:light dark;--bg:#0a2540;--panel:#0f3157;--line:#285079;--ink:#ffffff;--soft:#b9cde3;--sky:#8fd3ff;--pink:#ff5c8a;--node:#163d66}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
@@ -19,11 +19,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Hanken Grote
 .wrap{max-width:760px;margin:0 auto;padding:clamp(18px,3vw,40px) max(4vw,14px)}
 h1{font-weight:300;font-size:clamp(32px,6vw,48px);line-height:1.05;margin:0 0 8px;text-wrap:balance}
 h2{font-weight:600;font-size:22px;margin:24px 0 8px}
-p{color:var(--soft);margin:0 0 12px;max-width:65ch}
-.strip{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:10px 0 12px;border-bottom:1px solid var(--line);margin-bottom:12px}
+p{color:var(--soft);margin:0 0 12px;max-width:65ch}p b{color:var(--ink)}
+.strip{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:10px 0 12px;border-bottom:1px solid var(--line);margin-bottom:10px}
 .strip b{font-weight:700;color:var(--ink)}.strip span{color:var(--soft);white-space:nowrap}
-.msg{font-size:18px;min-height:2.6em;margin:6px 0 10px}
-.board{background:var(--panel);border-radius:14px;padding:8px;position:relative}
+.price{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700}
+.price.cheap{background:var(--sky);color:#0a2540}.price.dear{background:var(--pink);color:#0a2540}
+.msg{font-size:18px;min-height:2.6em;margin:6px 0 8px}
+.timer{height:8px;border-radius:4px;background:var(--panel);overflow:hidden;margin-bottom:8px;visibility:hidden}
+.timer i{display:block;height:100%;width:100%;background:var(--pink)}
+.board{background:var(--panel);border-radius:14px;padding:8px}
 svg{display:block;width:100%;height:auto;touch-action:manipulation}
 .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
 button{font:600 16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 20px;border-radius:10px;border:0;background:var(--sky);color:#0a2540;cursor:pointer}
@@ -31,15 +35,15 @@ button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line
 button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
 button:disabled{opacity:.4;cursor:default}
 .pad{display:none;grid-template-columns:repeat(3,56px);gap:6px;justify-content:center;margin-top:12px}
-.pad button{padding:0;font-size:20px}
-.pad.on{display:grid}
+.pad button{padding:0;font-size:20px}.pad.on{display:grid}
+input[type=text]{font:16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 table{border-collapse:collapse;width:100%;margin:8px 0 16px}
 th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left}th{color:var(--soft);font-weight:400}
+.scroll{overflow-x:auto}
 textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;font:13px/1.4 ui-monospace,monospace;padding:10px}
-.note{font-size:13px;color:var(--soft)}
-.hide{display:none}
-@media (prefers-reduced-motion:no-preference){.flip{animation:f .25s ease-out}@keyframes f{from{transform:scale(.6);opacity:.2}}}
+.note{font-size:13px;color:var(--soft)}.hide{display:none}
+@media (prefers-reduced-motion:no-preference){.flip{animation:f .25s ease-out;transform-box:fill-box;transform-origin:center}@keyframes f{from{transform:scale(.6);opacity:.2}}}
 @media(max-width:600px){table{font-size:13px}}
 </style>
 </head>
@@ -47,21 +51,23 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 <div class="wrap">
   <section id="intro">
     <h1>The memory maze</h1>
-    <p>Each round shows three paths from the start square. Every stop on a path hides some points. You can <b style="color:var(--ink)">click a stop to reveal its points, but each click costs you</b>. The price is shown at the top of the round.</p>
-    <p>When you've seen enough, pick a path. Then the maze disappears and you <b style="color:var(--ink)">walk your path from memory</b> with the arrow keys. Walk it correctly and you get its points minus what you paid for clicks. Make a mistake and you only pay for the clicks.</p>
-    <p class="note">2 practice rounds, then 16 real rounds (8 with cheap clicks and 8 with expensive ones, in random order). About 10 minutes. Your data appears at the end to copy.</p>
-    <div class="row"><button id="startBtn">Start practice</button></div>
+    <p>Each round shows <b>three paths</b> from the start square. Every stop hides some points, usually small, but <b>one stop on each path hides a big amount</b> (good or bad), and it can be anywhere along the path.</p>
+    <p>You can <b>click a stop to reveal its points, but each click costs you</b>. The price changes from round to round and is shown at the top. Some rounds also have a <b>time limit</b> for looking.</p>
+    <p>When you've seen enough, pick a path. Then the maze disappears and you <b>walk your path from memory</b> with the arrow keys (6 steps). Walk it correctly and you get its points minus your click costs. Make a mistake and you only pay for the clicks.</p>
+    <p class="note">4 practice rounds, then 24 real rounds in two parts (with and without a time limit). About 15 minutes. Please stay on this page while playing. Your data appears at the end to copy.</p>
+    <div class="row"><input type="text" id="pid" placeholder="Your initials or nickname" aria-label="Player ID"><button id="startBtn">Start practice</button></div>
   </section>
 
   <section id="game" class="hide">
     <div class="strip">
       <span>Round <b id="sRound">–</b></span>
-      <span>Click price <b id="sCost">–</b> pts</span>
-      <span>Paid this round <b id="sPaid">0</b></span>
+      <span>Click price <span id="sCost" class="price">–</span></span>
+      <span>Paid <b id="sPaid">0</b></span>
       <span>Total <b id="sTotal">0</b></span>
     </div>
     <div class="msg" id="msg"></div>
-    <div class="board"><svg id="svg" viewBox="0 0 540 540" role="img" aria-label="Maze board"></svg></div>
+    <div class="timer" id="timer"><i id="bar"></i></div>
+    <div class="board"><svg id="svg" viewBox="0 0 520 520" role="img" aria-label="Maze board"></svg></div>
     <div class="pad" id="pad">
       <span></span><button data-k="ArrowUp" aria-label="Up">↑</button><span></span>
       <button data-k="ArrowLeft" aria-label="Left">←</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="ArrowRight" aria-label="Right">→</button>
@@ -75,9 +81,9 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
   <section id="end" class="hide">
     <h1>Done. Here's how you played</h1>
     <p>Averages per round, real rounds only.</p>
-    <table><thead><tr><th>Click price</th><th>Clicks</th><th>Planning (s)</th><th>Chose best path</th><th>Walk correct</th><th>Avg score</th></tr></thead><tbody id="sumBody"></tbody></table>
+    <div class="scroll"><table><thead><tr><th>Condition</th><th>Clicks</th><th>Planning (s)</th><th>Chose best</th><th>Walk correct</th><th>Avg score</th></tr></thead><tbody id="sumBody"></tbody></table></div>
     <h2>Your data (one row per round)</h2>
-    <p class="note">This page can't download files, so copy the CSV and paste it into a file (e.g. <code>mydata.csv</code>) for Python.</p>
+    <p class="note">This page can't download files: copy the CSV and paste it into a file (e.g. <code>mydata.csv</code>).</p>
     <textarea id="csv" readonly></textarea>
     <div class="row"><button id="copyBtn">Copy CSV</button><button id="againBtn" class="ghost">Play again</button><span id="copied" class="note"></span></div>
   </section>
@@ -85,68 +91,93 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={practice:2,perBlock:8,costs:[1,3],hideMs:2000,
-  vals:[[-4,-2,2,4],[-4,-2,2,4],[-8,-4,4,8],[-24,-12,12,24]]};
-const BASE={straight:[[0,-1],[0,-2],[0,-3],[0,-4]],oneturn:[[1,0],[2,0],[2,1],[2,2]],zigzag:[[-1,0],[-1,1],[-2,1],[-2,2]]};
-const NAMES=Object.keys(BASE), S=60, C=4;
-const $=id=>document.getElementById(id);
-const svg=$('svg'), msg=$('msg');
+const CFG={version:'v2',steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:7000,hideMs:2500,R:6,
+  small:[-4,-2,2,4],big:[-24,-12,12,24],
+  bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
+const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
+const DIRS=[[0,-1],[1,0],[0,1],[-1,0]];
+const KEYDIR={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
-const tf=([x,y],rot,mir)=>{if(mir)x=-x;for(let r=0;r<rot;r++)[x,y]=[-y,x];return [x,y]};
-const KEYDIR={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+const key=c=>c[0]+','+c[1];
 
-function nats(cells){ // turn-coded policy complexity, first move = S
-  let prev=[0,0],dirs=[];for(const c of cells){dirs.push([c[0]-prev[0],c[1]-prev[1]]);prev=c}
-  const acts=dirs.map((d,i)=>{if(!i)return'S';const p=dirs[i-1],cr=p[0]*d[1]-p[1]*d[0];return cr===0?'S':(cr>0?'R':'L')});
-  const n={};acts.forEach(a=>n[a]=(n[a]||0)+1);
-  return -Object.values(n).reduce((s,k)=>{const p=k/acts.length;return s+p*Math.log(p)},0);
+function acts(cells){let prev=[0,0],d=[];for(const c of cells){d.push([c[0]-prev[0],c[1]-prev[1]]);prev=c}
+  return d.map((v,i)=>{if(!i)return'S';const p=d[i-1],cr=p[0]*v[1]-p[1]*v[0];return cr===0?'S':(cr>0?'R':'L')}).join('')}
+function nats(cells){const a=acts(cells),n={};for(const x of a)n[x]=(n[x]||0)+1;
+  return -Object.values(n).reduce((s,k)=>{const p=k/a.length;return s+p*Math.log(p)},0)}
+
+function walkFrom(d0,used){ // random self-avoiding path that keeps clear of other paths
+  let pos=[0,0],dir=d0,cells=[];
+  for(let i=0;i<CFG.steps;i++){
+    if(i>0){const r=Math.random();if(r<.25)dir=[-dir[1],dir[0]];else if(r<.5)dir=[dir[1],-dir[0]]}
+    const nx=[pos[0]+dir[0],pos[1]+dir[1]];
+    if(Math.abs(nx[0])>CFG.R||Math.abs(nx[1])>CFG.R||used.has(key(nx))||cells.some(c=>key(c)===key(nx)))return null;
+    const nb=DIRS.map(d=>key([nx[0]+d[0],nx[1]+d[1]]));
+    if(nb.some(k=>used.has(k)&&!(i===0&&k==='0,0')))return null;
+    if(cells.slice(0,-1).some(c=>nb.includes(key(c))))return null;
+    cells.push(nx);pos=nx;
+  }
+  return cells;
+}
+function genPaths(){
+  for(let t=0;t<20000;t++){
+    const used=new Set(['0,0']),firsts=shuffle(DIRS).slice(0,3),out=[];
+    for(const d of firsts){const c=walkFrom(d,used);if(!c)break;c.forEach(x=>used.add(key(x)));out.push(c)}
+    if(out.length<3)continue;
+    const sorted=out.map(c=>({c,n:nats(c)})).sort((a,b)=>a.n-b.n);
+    if(sorted.every((o,i)=>o.n>=CFG.bands[i][0]&&o.n<=CFG.bands[i][1]))return sorted;
+  }
+  return null;
 }
 
-let trials=[],ti=-1,T=null,total=0,log=[],phase='intro',hideTimer=null;
+let trials=[],ti=0,T=null,total=0,log=[],phase='intro',timers=[],raf=null,pid='';
 
 function buildTrials(){
-  const order=shuffle(CFG.costs);trials=[];
-  for(let i=0;i<CFG.practice;i++)trials.push({block:'practice',cost:CFG.costs[0]});
-  order.forEach((c,b)=>{for(let i=0;i<CFG.perBlock;i++)trials.push({block:'block'+(b+1),cost:c})});
+  trials=[];const mix=n=>shuffle(Array.from({length:n},(_,i)=>CFG.costs[i%2]));
+  mix(CFG.practice).forEach((c,i)=>trials.push({block:'practice',cost:c,deadline:i>=CFG.practice/2}));
+  shuffle([false,true]).forEach((dl,b)=>mix(CFG.perBlock).forEach(c=>trials.push({block:'block'+(b+1),cost:c,deadline:dl})));
 }
+
+function clearTimers(){timers.forEach(clearTimeout);timers=[];cancelAnimationFrame(raf);$('timer').style.visibility='hidden'}
 
 function newTrial(){
-  const t=trials[ti],rot=Math.floor(Math.random()*4),mir=Math.random()<.5;
-  const paths={};
-  NAMES.forEach(n=>{const cells=BASE[n].map(p=>tf(p,rot,mir));paths[n]={cells,vals:cells.map((_,d)=>rnd(CFG.vals[d])),shown:cells.map(()=>false),nats:nats(cells)}});
-  T={...t,rot,mir,paths,clicks:[],leaders:[],t0:performance.now(),tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[]};
+  clearTimers();const t=trials[ti],g=genPaths(),paths={};
+  g.forEach((o,i)=>{const bigAt=Math.floor(Math.random()*CFG.steps);
+    paths[LEVELS[i]]={cells:o.c,acts:acts(o.c),nats:o.n,bigAt,vals:o.c.map((_,d)=>d===bigAt?rnd(CFG.big):rnd(CFG.small)),shown:o.c.map(()=>false)}});
+  T={...t,paths,clicks:[],leaders:[],t0:performance.now(),tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,away:[],awayStart:null};
   phase='plan';render();status();
-  msg.textContent=t.block==='practice'?'Practice: click stops to reveal points, then press the button to pick a path.':'Click stops to reveal points. Press the button when you\'re ready to choose.';
+  const prac=t.block==='practice'?'Practice. ':'';
+  msg.textContent=prac+(t.deadline?`Time limit: ${CFG.deadlineMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.';
   $('doneBtn').classList.remove('hide');$('doneBtn').disabled=false;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
+  if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+CFG.deadlineMs;
+    const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.deadlineMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
+    timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent='Time\'s up! Click any stop on the path you want.'}},CFG.deadlineMs))}
 }
 
-const px=([x,y])=>[(x+C)*S+S/2,(y+C)*S+S/2];
+const px=([x,y])=>[(x+CFG.R)*S+S/2,(y+CFG.R)*S+S/2];
 const sumShown=p=>p.vals.reduce((s,v,i)=>s+(p.shown[i]?v:0),0);
-const leader=()=>{const s=NAMES.map(n=>sumShown(T.paths[n])),m=Math.max(...s);return s.filter(v=>v===m).length>1?'tie':NAMES[s.indexOf(m)]};
+const leader=()=>{const s=LEVELS.map(n=>sumShown(T.paths[n])),m=Math.max(...s);return s.filter(v=>v===m).length>1?'tie':LEVELS[s.indexOf(m)]};
 
 function render(hover){
-  let h='';
-  for(let i=0;i<=9;i++)h+=`<line x1="${i*S}" y1="0" x2="${i*S}" y2="540" stroke="var(--line)" stroke-width="1" opacity=".35"/><line x1="0" y1="${i*S}" x2="540" y2="${i*S}" stroke="var(--line)" stroke-width="1" opacity=".35"/>`;
+  let h='';const W=(2*CFG.R+1)*S;
+  for(let i=0;i<=2*CFG.R+1;i++)h+=`<line x1="${i*S}" y1="0" x2="${i*S}" y2="${W}" stroke="var(--line)" opacity=".35"/><line x1="0" y1="${i*S}" x2="${W}" y2="${i*S}" stroke="var(--line)" opacity=".35"/>`;
   const st=px([0,0]);
-  if(phase!=='hide'&&phase!=='walk'){
-    NAMES.forEach(n=>{const p=T.paths[n],pts=[st,...p.cells.map(px)].map(q=>q.join(',')).join(' ');
-      const hi=hover===n||(phase==='feedback'&&T.chosen===n);
-      h+=`<polyline points="${pts}" fill="none" stroke="${hi?'var(--sky)':'var(--line)'}" stroke-width="${hi?8:5}" stroke-linecap="round" stroke-linejoin="round"/>`});
-    NAMES.forEach(n=>{const p=T.paths[n];p.cells.forEach((c,i)=>{const [x,y]=px(c),show=p.shown[i]||phase==='feedback',v=p.vals[i];
+  if(phase==='plan'||phase==='choose'||phase==='feedback'){
+    LEVELS.forEach(n=>{const p=T.paths[n],pts=[st,...p.cells.map(px)].map(q=>q.join(',')).join(' '),hi=hover===n||(phase==='feedback'&&T.chosen===n);
+      h+=`<polyline points="${pts}" fill="none" stroke="${hi?'var(--sky)':'var(--line)'}" stroke-width="${hi?7:4}" stroke-linecap="round" stroke-linejoin="round"/>`});
+    LEVELS.forEach(n=>{const p=T.paths[n];p.cells.forEach((c,i)=>{const [x,y]=px(c),show=p.shown[i]||phase==='feedback',v=p.vals[i];
       const col=!show?'var(--node)':(v>0?'var(--sky)':'var(--pink)');
-      h+=`<g data-p="${n}" data-i="${i}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="22" fill="${col}" stroke="${hover===n?'var(--sky)':'var(--line)'}" stroke-width="2" class="${p.shown[i]&&phase==='plan'?'flip':''}"/>
-      <text x="${x}" y="${y+6}" text-anchor="middle" font-size="17" font-weight="700" fill="${show?'#0a2540':'var(--soft)'}" pointer-events="none">${show?(v>0?'+':'')+v:'?'}</text></g>`})});
+      h+=`<g data-p="${n}" data-i="${i}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="16" fill="${col}" stroke="${hover===n?'var(--sky)':'var(--line)'}" stroke-width="2" class="${p.shown[i]&&phase==='plan'?'flip':''}"/><text x="${x}" y="${y+5}" text-anchor="middle" font-size="13" font-weight="700" fill="${show?'#0a2540':'var(--soft)'}" pointer-events="none">${show?(v>0?'+':'')+v:'?'}</text></g>`})});
   } else if(phase==='walk'){
-    const pts=[st,...T.walkCells.map(px)].map(q=>q.join(',')).join(' ');
-    h+=`<polyline points="${pts}" fill="none" stroke="var(--sky)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
-    T.walkCells.forEach(c=>{const [x,y]=px(c);h+=`<circle cx="${x}" cy="${y}" r="10" fill="var(--sky)"/>`});
+    h+=`<polyline points="${[st,...T.walkCells.map(px)].map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--sky)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+    T.walkCells.forEach(c=>{const [x,y]=px(c);h+=`<circle cx="${x}" cy="${y}" r="8" fill="var(--sky)"/>`});
   }
-  if(phase!=='hide')h+=`<rect x="${st[0]-24}" y="${st[1]-24}" width="48" height="48" rx="10" fill="var(--pink)"/><text x="${st[0]}" y="${st[1]+5}" text-anchor="middle" font-size="13" font-weight="700" fill="#0a2540">start</text>`;
+  if(phase!=='hide')h+=`<rect x="${st[0]-18}" y="${st[1]-18}" width="36" height="36" rx="8" fill="var(--pink)"/><text x="${st[0]}" y="${st[1]+4}" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2540">start</text>`;
   svg.innerHTML=h;
 }
 
-function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CFG.practice+1)+' / '+(trials.length-CFG.practice);$('sCost').textContent=T.cost;$('sPaid').textContent=T.clicks.length*T.cost;$('sTotal').textContent=total}
+function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CFG.practice+1)+' / '+(trials.length-CFG.practice);
+  const c=$('sCost');c.textContent=T.cost+' pt';c.className='price '+(T.cost===CFG.costs[0]?'cheap':'dear');$('sPaid').textContent=T.clicks.length*T.cost;$('sTotal').textContent=total}
 
 svg.addEventListener('click',e=>{
   const g=e.target.closest('g[data-p]');if(!g)return;const n=g.dataset.p,i=+g.dataset.i,p=T.paths[n];
@@ -155,52 +186,61 @@ svg.addEventListener('click',e=>{
 });
 svg.addEventListener('mousemove',e=>{if(phase!=='choose')return;const g=e.target.closest('g[data-p]');render(g?g.dataset.p:null)});
 
-$('doneBtn').onclick=()=>{if(phase!=='plan')return;phase='choose';T.tDone=performance.now();$('doneBtn').disabled=true;msg.textContent='Click any stop on the path you want.';render()};
+function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();$('doneBtn').disabled=true;render()}
+$('doneBtn').onclick=()=>{if(phase!=='plan')return;toChoose();msg.textContent='Click any stop on the path you want.'};
 
-function startHide(){phase='hide';render();$('doneBtn').classList.add('hide');msg.textContent='Remember your path…';hideTimer=setTimeout(()=>{phase='walk';T.tWalk=performance.now();render();$('pad').classList.add('on');msg.textContent='Walk your path from the start: use the arrow keys (4 steps).'},CFG.hideMs)}
+function startHide(){phase='hide';render();$('doneBtn').classList.add('hide');msg.textContent='Remember your path…';
+  timers.push(setTimeout(()=>{phase='walk';T.tWalk=performance.now();render();$('pad').classList.add('on');msg.textContent=`Walk your path from the start with the arrow keys (${CFG.steps} steps).`},CFG.hideMs))}
 
 function step(k){
   if(phase!=='walk'||!KEYDIR[k])return;const d=KEYDIR[k],last=T.walkCells.length?T.walkCells[T.walkCells.length-1]:[0,0];
   T.walkCells.push([last[0]+d[0],last[1]+d[1]]);T.walk.push({k:k.replace('Arrow',''),t:Math.round(performance.now()-T.tWalk)});render();
-  if(T.walkCells.length===4)finish();
+  if(T.walkCells.length===CFG.steps)finish();
 }
 document.addEventListener('keydown',e=>{if(KEYDIR[e.key]&&phase==='walk'){e.preventDefault();step(e.key)}});
 $('pad').addEventListener('click',e=>{const b=e.target.closest('button');if(b)step(b.dataset.k)});
 
+// focus tracking: time spent away from the page during a round
+const goneAway=()=>{if(T&&['plan','choose','hide','walk'].includes(phase)&&T.awayStart===null)T.awayStart=performance.now()};
+const cameBack=()=>{if(T&&T.awayStart!==null){T.away.push({from:Math.round(T.awayStart-T.t0),to:Math.round(performance.now()-T.t0),phase});T.awayStart=null}};
+window.addEventListener('blur',goneAway);window.addEventListener('focus',cameBack);
+document.addEventListener('visibilitychange',()=>document.hidden?goneAway():cameBack());
+
 function finish(){
-  const p=T.paths[T.chosen],target=p.cells;let err=null;
-  for(let i=0;i<4;i++)if(T.walkCells[i][0]!==target[i][0]||T.walkCells[i][1]!==target[i][1]){err=i+1;break}
-  const reward=p.vals.reduce((a,b)=>a+b,0),paid=T.clicks.length*T.cost,score=(err?0:reward)-paid;
-  const sums=NAMES.map(n=>T.paths[n].vals.reduce((a,b)=>a+b,0)),best=NAMES[sums.indexOf(Math.max(...sums))];
+  cameBack();const p=T.paths[T.chosen];let err=null;
+  for(let i=0;i<CFG.steps;i++)if(key(T.walkCells[i])!==key(p.cells[i])){err=i+1;break}
+  const sums=LEVELS.map(n=>T.paths[n].vals.reduce((a,b)=>a+b,0)),best=LEVELS[sums.indexOf(Math.max(...sums))];
+  const reward=sums[LEVELS.indexOf(T.chosen)],paid=T.clicks.length*T.cost,score=(err?0:reward)-paid;
   if(T.block!=='practice')total+=score;
-  const ic=T.clicks.map((c,i)=>i?c.t-T.clicks[i-1].t:c.t);
-  log.push({round:ti+1,block:T.block,click_cost:T.cost,rotation:T.rot,mirrored:T.mir,
-    reward_straight:sums[0],reward_oneturn:sums[1],reward_zigzag:sums[2],
-    nats_straight:+T.paths.straight.nats.toFixed(3),nats_oneturn:+T.paths.oneturn.nats.toFixed(3),nats_zigzag:+T.paths.zigzag.nats.toFixed(3),
-    node_values:JSON.stringify(Object.fromEntries(NAMES.map(n=>[n,T.paths[n].vals]))),
+  const ic=T.clicks.map((c,i)=>i?c.t-T.clicks[i-1].t:c.t),awayMs=T.away.reduce((s,a)=>s+a.to-a.from,0);
+  const row={player:pid,version:CFG.version,round:ti+1,block:T.block,click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut};
+  LEVELS.forEach((n,i)=>{const q=T.paths[n];row['reward_'+n]=sums[i];row['nats_'+n]=+q.nats.toFixed(3);row['acts_'+n]=q.acts;row['bigpos_'+n]=q.bigAt+1});
+  Object.assign(row,{node_values:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].vals]))),path_cells:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].cells]))),
     n_clicks:T.clicks.length,clicks:JSON.stringify(T.clicks),leader_after_each_click:JSON.stringify(T.leaders),
     time_first_click_ms:T.clicks.length?T.clicks[0].t:'',inter_click_ms:JSON.stringify(ic),
     planning_time_ms:Math.round(T.tDone-T.t0),choice_time_ms:Math.round(T.tChoice-T.tDone),
     chosen_path:T.chosen,chosen_nats:+p.nats.toFixed(3),best_path:best,chose_best:T.chosen===best,
     walk_keys:JSON.stringify(T.walk),walk_correct:!err,first_error_step:err||'',
-    path_reward:reward,paid_for_clicks:paid,score});
+    away_ms:awayMs,away_events:JSON.stringify(T.away),path_reward:reward,paid_for_clicks:paid,score});
+  log.push(row);
   phase='feedback';render();$('pad').classList.remove('on');status();
-  msg.textContent=(err?`Wrong turn at step ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. ${T.chosen===best?'You picked the best path.':'The best path was '+({straight:'the straight one',oneturn:'the one-turn one',zigzag:'the zigzag'})[best]+'.'}`;
+  msg.textContent=(err?`Wrong step at ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. `+(T.chosen===best?'You picked the best path.':'The highlighted path wasn\'t the best one.');
   $('nextBtn').classList.remove('hide');$('nextBtn').focus();
 }
 
-$('nextBtn').onclick=()=>{ti++;if(ti>=trials.length)return end();if(ti===CFG.practice)msg.textContent='';newTrial()};
+$('nextBtn').onclick=()=>{ti++;if(ti>=trials.length)return end();newTrial()};
 
 function end(){
-  phase='end';$('game').classList.add('hide');$('end').classList.remove('hide');
+  clearTimers();phase='end';$('game').classList.add('hide');$('end').classList.remove('hide');
   const real=log.filter(r=>r.block!=='practice'),mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
-  $('sumBody').innerHTML=CFG.costs.map(c=>{const r=real.filter(x=>x.click_cost===c);return `<tr><td>${c} pt</td><td>${mean(r.map(x=>x.n_clicks)).toFixed(1)}</td><td>${(mean(r.map(x=>x.planning_time_ms))/1000).toFixed(1)}</td><td>${Math.round(100*mean(r.map(x=>+x.chose_best)))}%</td><td>${Math.round(100*mean(r.map(x=>+x.walk_correct)))}%</td><td>${mean(r.map(x=>x.score)).toFixed(1)}</td></tr>`}).join('');
+  const conds=[];[false,true].forEach(dl=>CFG.costs.forEach(c=>conds.push({dl,c})));
+  $('sumBody').innerHTML=conds.map(({dl,c})=>{const r=real.filter(x=>x.click_cost===c&&x.deadline===dl);return `<tr><td>${c} pt, ${dl?'time limit':'no limit'}</td><td>${mean(r.map(x=>x.n_clicks)).toFixed(1)}</td><td>${(mean(r.map(x=>x.planning_time_ms))/1000).toFixed(1)}</td><td>${Math.round(100*mean(r.map(x=>+x.chose_best)))}%</td><td>${Math.round(100*mean(r.map(x=>+x.walk_correct)))}%</td><td>${mean(r.map(x=>x.score)).toFixed(1)}</td></tr>`}).join('');
   const cols=Object.keys(log[0]),esc=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   $('csv').value=[cols.join(','),...log.map(r=>cols.map(c=>esc(r[c])).join(','))].join('\n');
 }
 
 $('copyBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('csv').value);$('copied').textContent='Copied.'}catch(e){$('csv').select();$('copied').textContent='Press Ctrl/Cmd+C to copy the selected text.'}};
-function start(){buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
+function start(){pid=($('pid').value||'anon').trim().slice(0,30);buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
 $('startBtn').onclick=start;$('againBtn').onclick=start;
 }
 </script>

@@ -7,17 +7,20 @@ The design is Mouselab-MDP style (Callaway, Lieder, Krueger & Griffiths, 2017) w
 - **Computation:** clicks that reveal hidden rewards (each click costs points), plus planning time.
 - **Policy complexity (memory):** the chosen path must be walked from memory. Its cost is the turn-coded policy complexity *I(S;A)* in nats.
 
-## One round
-1. **Plan:** three equal-length paths (straight = 0 nats, one turn ≈ 0.56, zigzag ≈ 1.04) with hidden rewards. Click stops to reveal them.
-2. **Choose:** pick a path.
-3. **Remember:** the maze disappears for 2 s.
-4. **Walk:** reproduce the path with the arrow keys. A correct walk earns the path's reward minus click costs. A wrong turn earns only the minus.
+## One round (v2)
+1. **Plan:** three 6-step paths from the start, with new random shapes every round, one each at low (≈0.45), mid (≈0.6–0.9) and high (≈1.0+) turn-coded complexity in nats. Each stop hides a small value (±2/4). **One stop per path, at a random position, hides a big value (±12/24)**, so there's no "check the leaves" shortcut.
+2. **Choose:** pick a path. In deadline rounds, looking ends after 7 s.
+3. **Remember:** the maze disappears for 2.5 s.
+4. **Walk:** reproduce the path with the arrow keys. A correct walk earns the path's reward minus click costs. A wrong step earns only the minus.
 
-There are 2 practice rounds, then 2 blocks of 8 rounds with a cheap (1 pt) or expensive (3 pt) click price, in random order. Layouts are rotated and mirrored each round.
+Structure: 4 practice rounds, then 2 blocks of 12 (no limit vs. 7 s limit, random order). The click price (1 or 3 pt) is mixed within each block, which avoids order and learning confounds.
 
 ## Data
-At the end, the page shows one CSV row per round to copy. Key columns:
-`click_cost`, `n_clicks`, `clicks` (node, value, time), `leader_after_each_click`, `inter_click_ms`, `planning_time_ms`, `chosen_path`, `chosen_nats`, `best_path`, `walk_keys`, `walk_correct`, `first_error_step`, `score`.
+One CSV row per round (copy at the end). Key columns: `player`, `click_cost`, `deadline`, `timed_out`, `nats_*`, `acts_*` (S/L/R codes), `bigpos_*`, `n_clicks`, `clicks` (node, value, time), `leader_after_each_click`, `inter_click_ms`, `planning_time_ms`, `chosen_path`, `chosen_nats`, `best_path`, `walk_keys`, `walk_correct`, `first_error_step`, `away_ms` / `away_events` (time the page lost focus, so distraction isn't counted as thinking), `score`.
+
+## Changelog
+- **v2:** random big-value position; random 6-step paths with varied nats; deadline block; click price mixed within blocks; focus-loss logging; player ID.
+- **v1:** fixed 3 shapes (straight / one turn / zigzag), big values always at the last stop, 2 cost blocks. Pilot issues: leaf-only shortcut, memory too easy, zigzag chunkable as alternation, order confound, pauses that were really distraction.
 
 ## Run
 Open `index.html` in a browser, or serve it with GitHub Pages (Settings → Pages → Deploy from branch → `main` / root).
