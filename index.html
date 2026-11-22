@@ -36,7 +36,7 @@ button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
 button:disabled{opacity:.4;cursor:default}
 .pad{display:none;grid-template-columns:repeat(3,56px);gap:6px;justify-content:center;margin-top:12px}
 .pad button{padding:0;font-size:20px}.pad.on{display:grid}
-input[type=text]{font:16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+select,input[type=text]{font:16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 table{border-collapse:collapse;width:100%;margin:8px 0 16px}
 th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left}th{color:var(--soft);font-weight:400}
@@ -89,6 +89,14 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
     <textarea id="csv" readonly></textarea>
     <div class="row"><button id="copyBtn">Copy CSV</button><button id="againBtn" class="ghost">Play again</button><span id="copied" class="note"></span></div>
   </section>
+
+  <section id="saved">
+    <h2>Saved data on this device</h2>
+    <p class="note">Every finished round is saved automatically in this browser, by player ID. It stays here between visits, but only on this device and browser.</p>
+    <div class="row"><select id="savedSel" aria-label="Player ID"></select><button id="showBtn" class="ghost">Show CSV</button><button id="copySavedBtn" class="ghost">Copy CSV</button><button id="delBtn" class="ghost">Delete this ID</button></div>
+    <p class="note" id="savedInfo"></p>
+    <textarea id="savedCsv" readonly class="hide"></textarea>
+  </section>
 </div>
 
 <script>
@@ -132,7 +140,7 @@ function genPaths(){
   return null;
 }
 
-let trials=[],ti=0,T=null,total=0,log=[],phase='intro',timers=[],raf=null,pid='';
+let trials=[],ti=0,T=null,total=0,log=[],phase='intro',timers=[],raf=null,pid='',sessionId='';
 
 function buildTrials(){
   trials=[];const mix=n=>shuffle(Array.from({length:n},(_,i)=>CFG.costs[i%2]));
@@ -218,7 +226,7 @@ function finish(){
   const reward=sums[LEVELS.indexOf(T.chosen)],paid=T.clicks.length*T.cost,score=(err?0:reward)-paid;
   if(T.block!=='practice')total+=score;
   const ic=T.clicks.map((c,i)=>i?c.t-T.clicks[i-1].t:c.t),awayMs=T.away.reduce((s,a)=>s+a.to-a.from,0);
-  const row={player:pid,version:CFG.version,round:ti+1,block:T.block,click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut};
+  const row={player:pid,session:sessionId,version:CFG.version,round:ti+1,block:T.block,click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut};
   LEVELS.forEach((n,i)=>{const q=T.paths[n];row['reward_'+n]=sums[i];row['nats_'+n]=+q.nats.toFixed(3);row['acts_'+n]=q.acts;row['bigpos_'+n]=q.bigAt+1});
   Object.assign(row,{node_values:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].vals]))),path_cells:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].cells]))),
     n_clicks:T.clicks.length,clicks:JSON.stringify(T.clicks),leader_after_each_click:JSON.stringify(T.leaders),
@@ -227,7 +235,7 @@ function finish(){
     chosen_path:T.chosen,chosen_nats:+p.nats.toFixed(3),best_path:best,chose_best:T.chosen===best,
     walk_keys:JSON.stringify(T.walk),walk_correct:!err,first_error_step:err||'',
     away_ms:awayMs,away_events:JSON.stringify(T.away),path_reward:reward,paid_for_clicks:paid,score});
-  log.push(row);
+  log.push(row);saveRow(row);
   phase='feedback';render();$('pad').classList.remove('on');status();
   msg.textContent=(err?`Wrong step at ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. `+(T.chosen===best?'You picked the best path.':'The highlighted path wasn\'t the best one.');
   $('nextBtn').classList.remove('hide');$('nextBtn').focus();
@@ -235,8 +243,28 @@ function finish(){
 
 $('nextBtn').onclick=()=>{ti++;if(ti>=trials.length)return end();newTrial()};
 
+const STORE='overthinking_maze_log';
+function loadStore(){try{return JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){return null}}
+function saveRow(row){const s=loadStore();if(!s)return false;(s[row.player]=s[row.player]||[]).push(row);try{localStorage.setItem(STORE,JSON.stringify(s));return true}catch(e){return false}}
+function toCSV(rows){const cols=[...new Set(rows.flatMap(r=>Object.keys(r)))],esc=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  return [cols.join(','),...rows.map(r=>cols.map(c=>esc(r[c])).join(','))].join('\n')}
+let delArmed=false;
+function refreshPanel(){const s=loadStore(),sel=$('savedSel');$('savedCsv').classList.add('hide');delArmed=false;$('delBtn').textContent='Delete this ID';
+  if(!s){$('savedInfo').textContent='This browser blocks saving, so use the Copy button at the end of each game.';sel.innerHTML='';return}
+  const ids=Object.keys(s);const keep=sel.value;
+  sel.innerHTML=ids.length?ids.map(id=>{const r=s[id],ses=new Set(r.map(x=>x.session)).size;return `<option value="${id.replace(/"/g,'&quot;')}">${id.replace(/</g,'&lt;')} (${r.length} rounds, ${ses} session${ses>1?'s':''})</option>`}).join(''):'<option value="">No saved data yet</option>';
+  if(ids.includes(keep))sel.value=keep;
+  $('savedInfo').textContent=ids.length?'':'Nothing saved yet. Data appears here after your first round.';}
+const selRows=()=>{const s=loadStore();return s&&s[$('savedSel').value]||[]};
+$('showBtn').onclick=()=>{const r=selRows();if(!r.length)return;$('savedCsv').value=toCSV(r);$('savedCsv').classList.remove('hide')};
+$('copySavedBtn').onclick=async()=>{const r=selRows();if(!r.length)return;const t=toCSV(r);$('savedCsv').value=t;$('savedCsv').classList.remove('hide');
+  try{await navigator.clipboard.writeText(t);$('savedInfo').textContent='Copied '+r.length+' rounds.'}catch(e){$('savedCsv').select();$('savedInfo').textContent='Press Ctrl/Cmd+C to copy the selected text.'}};
+$('delBtn').onclick=()=>{const id=$('savedSel').value;if(!id)return;
+  if(!delArmed){delArmed=true;$('delBtn').textContent='Click again to delete '+id;return}
+  const s=loadStore();if(s){delete s[id];try{localStorage.setItem(STORE,JSON.stringify(s))}catch(e){}}refreshPanel();$('savedInfo').textContent='Deleted '+id+'.'};
+
 function end(){
-  clearTimers();phase='end';$('game').classList.add('hide');$('end').classList.remove('hide');
+  clearTimers();phase='end';$('game').classList.add('hide');$('end').classList.remove('hide');$('saved').classList.remove('hide');refreshPanel();$('savedSel').value=pid;
   const real=log.filter(r=>r.block!=='practice'),mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
   const conds=[];[false,true].forEach(dl=>CFG.costs.forEach(c=>conds.push({dl,c})));
   $('sumBody').innerHTML=conds.map(({dl,c})=>{const r=real.filter(x=>x.click_cost===c&&x.deadline===dl);return `<tr><td>${c} pt, ${dl?'time limit':'no limit'}</td><td>${mean(r.map(x=>x.n_clicks)).toFixed(1)}</td><td>${(mean(r.map(x=>x.planning_time_ms))/1000).toFixed(1)}</td><td>${Math.round(100*mean(r.map(x=>+x.chose_best)))}%</td><td>${Math.round(100*mean(r.map(x=>+x.walk_correct)))}%</td><td>${mean(r.map(x=>x.score)).toFixed(1)}</td></tr>`}).join('');
@@ -245,8 +273,8 @@ function end(){
 }
 
 $('copyBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('csv').value);$('copied').textContent='Copied.'}catch(e){$('csv').select();$('copied').textContent='Press Ctrl/Cmd+C to copy the selected text.'}};
-function start(){pid=($('pid').value||'anon').trim().slice(0,30);buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
-$('startBtn').onclick=start;$('againBtn').onclick=start;
+function start(){pid=($('pid').value||'anon').trim().slice(0,30);sessionId=new Date().toISOString();$('saved').classList.add('hide');buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
+$('startBtn').onclick=start;$('againBtn').onclick=start;refreshPanel();
 }
 </script>
 </body>

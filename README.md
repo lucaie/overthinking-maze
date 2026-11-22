@@ -19,6 +19,7 @@ Structure: 4 practice rounds, then 2 blocks of 12 (no limit vs. 7 s limit, rando
 One CSV row per round (copy at the end). Key columns: `player`, `click_cost`, `deadline`, `timed_out`, `nats_*`, `acts_*` (S/L/R codes), `bigpos_*`, `n_clicks`, `clicks` (node, value, time), `leader_after_each_click`, `inter_click_ms`, `planning_time_ms`, `chosen_path`, `chosen_nats`, `best_path`, `walk_keys`, `walk_correct`, `first_error_step`, `away_ms` / `away_events` (time the page lost focus, so distraction isn't counted as thinking), `score`.
 
 ## Changelog
+- **v2.2:** every round auto-saved in the browser (localStorage), by player ID and session; "Saved data on this device" panel on the start and end screens to show, copy or delete each ID's data.
 - **v2.1:** red "−price" pop-up on every click (pilot: the click price went unnoticed).
 - **v2:** random big-value position; random 6-step paths with varied nats; deadline block; click price mixed within blocks; focus-loss logging; player ID.
 - **v1:** fixed 3 shapes (straight / one turn / zigzag), big values always at the last stop, 2 cost blocks. Pilot issues: leaf-only shortcut, memory too easy, zigzag chunkable as alternation, order confound, pauses that were really distraction.
