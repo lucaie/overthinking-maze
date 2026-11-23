@@ -27,4 +27,6 @@ ax.set_title('A deadline costs the overthinker least, and at a high click price 
 fig.text(0.01, 0.01, 'Simulated agents, 3,000 matched mazes per condition. Deadline = 60% of each agent’s own planning time; 1 s per click.',
          color=SOFT, fontsize=11)
 fig.tight_layout(rect=(0, 0.03, 1, 1)); fig.savefig(__file__.rsplit('/', 1)[0] + '/deadline_effect.png', facecolor=BG)
+ax.set_title('', loc='left'); fig.texts.clear(); fig.set_size_inches(12, 5.6); fig.tight_layout()
+fig.savefig(__file__.rsplit('/', 1)[0] + '/deadline_effect_slide.png', facecolor=BG)
 print(d.round(2))
