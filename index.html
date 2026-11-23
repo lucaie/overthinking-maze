@@ -85,7 +85,6 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
     </aside>
     <div class="board"><div class="card" id="card"><div class="sub">This round, each click costs</div><div class="big" id="cardPrice">–</div><div class="sub" id="cardDl"></div></div><svg id="svg" viewBox="0 0 520 520" role="img" aria-label="Maze board"></svg></div>
     <aside class="side right">
-      <button id="doneBtn">I'm done looking: pick a path</button>
       <button id="nextBtn" class="hide">Next round</button>
       <button id="exitBtn" class="ghost hide">Exit demo</button>
       <div class="pad" id="pad">
@@ -116,7 +115,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={version:'v2.7',practiceFree:4,practiceTimed:2,dlFrac:0.6,dlMin:5000,dlMax:15000,demoDeadline:8000,choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:6,perBlock:12,costs:[2,4],deadlineMs:12000,hideMs:2500,R:6,
+const CFG={version:'v2.8',doneDelayMs:1000,practiceFree:4,practiceTimed:2,dlFrac:0.6,dlMin:5000,dlMax:15000,demoDeadline:8000,choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:6,perBlock:12,costs:[2,4],deadlineMs:12000,hideMs:2500,R:6,
   small:[-8,-4,4,8],big:[-48,-24,24,48],
   bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
 const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
@@ -184,15 +183,16 @@ function newTrial(){
     paths[n]={cells,acts:acts(cells),nats:nats(cells),bigAt:q.bigAt,vals:q.vals.slice(),shown:cells.map(()=>false)}});
   T={...t,paths,clicks:[],leaders:[],t0:null,tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,froze:false,away:[],awayStart:null};
   phase='card';render();status();msg.textContent='Get ready…';
-  $('doneBtn').classList.remove('hide');$('doneBtn').disabled=true;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
+  $('nextBtn').classList.add('hide');$('pad').classList.remove('on');
   const card=$('card'),cp=$('cardPrice');cp.textContent=t.cost+(t.cost===1?' point':' points');cp.style.color=t.cost===CFG.costs[0]?'var(--sky)':'var(--pink)';
   $('cardDl').textContent=t.deadline?`You'll have ${dlMs/1000} seconds to look.`:'No time limit this round.';card.classList.add('on');
   timers.push(setTimeout(()=>{card.classList.remove('on');T.tCardEnd=performance.now();phase='ready';render();msg.textContent='Click the start square to begin the round.'},CFG.cardMs));
 }
 function startPlan(){
-  const t=trials[ti];T.t0=performance.now();phase='plan';render();$('doneBtn').disabled=false;
+  const t=trials[ti];T.t0=performance.now();T.doneReady=false;phase='plan';render();
+  timers.push(setTimeout(()=>{if(phase==='plan'&&!T.doneReady){T.doneReady=true;render()}},CFG.doneDelayMs));
   const prac=t.block==='practice'?'Practice. ':'';
-  msg.textContent=prac+(t.deadline?`Time limit: ${dlMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.'+(t.deadline?` Then you have ${CFG.choiceMs/1000} s to pick.`:'');
+  msg.innerHTML=prac+(t.deadline?`Time limit: ${dlMs/1000} s to look. `:'')+'Click stops to reveal points, then click <b>done</b> in the middle to choose.'+(t.deadline?` Then you have ${CFG.choiceMs/1000} s to pick.`:'');
   if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+dlMs;
     const tick=()=>{const f=Math.max(0,(end-performance.now())/dlMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
     timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent=`Time's up! Pick a path within ${CFG.choiceMs/1000} s.`}},dlMs))}
@@ -216,7 +216,8 @@ function render(hover){
     h+=`<polyline points="${[st,...T.walkCells.map(px)].map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--sky)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
     T.walkCells.forEach(c=>{const [x,y]=px(c);h+=`<circle cx="${x}" cy="${y}" r="8" fill="var(--sky)"/>`});
   }
-  if(phase!=='hide')h+=`<rect data-start="1" class="${phase==='ready'?'pulse':''}" style="cursor:${phase==='ready'?'pointer':'default'}" x="${st[0]-18}" y="${st[1]-18}" width="36" height="36" rx="8" fill="var(--pink)"/><text x="${st[0]}" y="${st[1]+4}" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2540" pointer-events="none">start</text>`;
+  if(phase!=='hide'){const isDone=phase==='plan'&&T.doneReady,live=phase==='ready'||isDone;
+    h+=`<rect data-start="1" class="${live?'pulse':''}" style="cursor:${live?'pointer':'default'}" x="${st[0]-20}" y="${st[1]-20}" width="40" height="40" rx="8" fill="${isDone?'var(--sky)':'var(--pink)'}"/><text x="${st[0]}" y="${st[1]+4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2540" pointer-events="none">${isDone?'done':'start'}</text>`}
   svg.innerHTML=h;
 }
 
@@ -225,8 +226,9 @@ function status(){$('sRound').textContent=demo?'demo '+(ti+1)+' / '+trials.lengt
 
 svg.addEventListener('click',e=>{
   if(phase==='ready'&&e.target.closest('[data-start]')){T.tReady=performance.now();startPlan();return}
+  if(phase==='plan'&&T.doneReady&&e.target.closest('[data-start]')){toChoose();msg.textContent='Click any stop on the path you want.';return}
   const g=e.target.closest('g[data-p]');if(!g)return;const n=g.dataset.p,i=+g.dataset.i,p=T.paths[n];
-  if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());render();status();pop(p.cells[i],T.cost)}
+  if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());T.doneReady=true;render();status();pop(p.cells[i],T.cost)}
   else if(phase==='choose'){T.chosen=n;T.tChoice=performance.now();clearTimers();startHide()}
 });
 svg.addEventListener('mousemove',e=>{if(phase!=='choose')return;const g=e.target.closest('g[data-p]');render(g?g.dataset.p:null)});
@@ -234,13 +236,12 @@ svg.addEventListener('mousemove',e=>{if(phase!=='choose')return;const g=e.target
 function pop(c,cost){const [x,y]=px(c),t=document.createElementNS('http://www.w3.org/2000/svg','text');
   t.setAttribute('x',x+14);t.setAttribute('y',y-14);t.setAttribute('class','pop');t.textContent='\u2212'+cost;svg.appendChild(t);
   timers.push(setTimeout(()=>t.remove(),900))}
-function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();$('doneBtn').disabled=true;render();
+function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();render();
   if(T.deadline){$('timer').style.visibility='visible';const end=T.tDone+CFG.choiceMs;
     const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.choiceMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='choose')raf=requestAnimationFrame(tick)};tick();
     timers.push(setTimeout(()=>{if(phase==='choose'){T.froze=true;T.tChoice=performance.now();finish()}},CFG.choiceMs))}}
-$('doneBtn').onclick=()=>{if(phase!=='plan')return;toChoose();msg.textContent='Click any stop on the path you want.'};
 
-function startHide(){phase='hide';render();$('doneBtn').classList.add('hide');msg.textContent='Remember your path…';
+function startHide(){phase='hide';render();msg.textContent='Remember your path…';
   timers.push(setTimeout(()=>{phase='walk';T.tWalk=performance.now();render();$('pad').classList.add('on');msg.textContent=`Walk your path from the start with the arrow keys (${CFG.steps} steps).`},CFG.hideMs))}
 
 function step(k){
