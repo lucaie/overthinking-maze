@@ -27,7 +27,9 @@ p{color:var(--soft);margin:0 0 12px;max-width:65ch}p b{color:var(--ink)}
 .msg{font-size:18px;min-height:2.6em;margin:6px 0 8px}
 .timer{height:8px;border-radius:4px;background:var(--panel);overflow:hidden;margin-bottom:8px;visibility:hidden}
 .timer i{display:block;height:100%;width:100%;background:var(--pink)}
-.board{background:var(--panel);border-radius:14px;padding:8px}
+.board{background:var(--panel);border-radius:14px;padding:8px;position:relative}
+.card{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;border-radius:14px;background:var(--panel);text-align:center;padding:20px}
+.card.on{display:flex}.card .big{font-size:clamp(40px,10vw,72px);font-weight:700;line-height:1}.card .sub{color:var(--soft);font-size:18px}
 svg{display:block;width:100%;height:auto;touch-action:manipulation}
 .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
 button{font:600 16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 20px;border-radius:10px;border:0;background:var(--sky);color:#0a2540;cursor:pointer}
@@ -53,8 +55,8 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 <div class="wrap">
   <section id="intro">
     <h1>The memory maze</h1>
-    <p>Each round shows <b>three paths</b> from the start square. Every stop hides some points, usually small, but <b>one stop on each path hides a big amount</b> (good or bad), and it can be anywhere along the path.</p>
-    <p>You can <b>click a stop to reveal its points, but each click costs you</b>. The price changes from round to round and is shown at the top. Some rounds also have a <b>time limit</b> for looking.</p>
+    <p>Each round shows <b>three paths</b> from the start square. Every stop hides some points, usually small, but <b>one stop on each path hides a big amount</b> (good or bad, up to ±48), and it can be anywhere along the path.</p>
+    <p>You can <b>click a stop to reveal its points, but each click costs you</b>. The price changes from round to round and is shown at the top. Before each round, the price is shown for 3 seconds. Some rounds also have a <b>12-second time limit</b> for looking.</p>
     <p>When you've seen enough, pick a path. Then the maze disappears and you <b>walk your path from memory</b> with the arrow keys (6 steps). Walk it correctly and you get its points minus your click costs. Make a mistake and you only pay for the clicks.</p>
     <p class="note">4 practice rounds, then 24 real rounds in two parts (with and without a time limit). About 15 minutes. Please stay on this page while playing. Your data appears at the end to copy.</p>
     <div class="row"><input type="text" id="pid" placeholder="Your initials or nickname" aria-label="Player ID"><button id="startBtn">Start practice</button></div>
@@ -69,7 +71,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
     </div>
     <div class="msg" id="msg"></div>
     <div class="timer" id="timer"><i id="bar"></i></div>
-    <div class="board"><svg id="svg" viewBox="0 0 520 520" role="img" aria-label="Maze board"></svg></div>
+    <div class="board"><div class="card" id="card"><div class="sub">This round, each click costs</div><div class="big" id="cardPrice">–</div><div class="sub" id="cardDl"></div></div><svg id="svg" viewBox="0 0 520 520" role="img" aria-label="Maze board"></svg></div>
     <div class="pad" id="pad">
       <span></span><button data-k="ArrowUp" aria-label="Up">↑</button><span></span>
       <button data-k="ArrowLeft" aria-label="Left">←</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="ArrowRight" aria-label="Right">→</button>
@@ -101,8 +103,8 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={version:'v2',steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:7000,hideMs:2500,R:6,
-  small:[-4,-2,2,4],big:[-24,-12,12,24],
+const CFG={version:'v2.3',cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
+  small:[-8,-4,4,8],big:[-48,-24,24,48],
   bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
 const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
 const DIRS=[[0,-1],[1,0],[0,1],[-1,0]];
@@ -154,11 +156,17 @@ function newTrial(){
   clearTimers();const t=trials[ti],g=genPaths(),paths={};
   g.forEach((o,i)=>{const bigAt=Math.floor(Math.random()*CFG.steps);
     paths[LEVELS[i]]={cells:o.c,acts:acts(o.c),nats:o.n,bigAt,vals:o.c.map((_,d)=>d===bigAt?rnd(CFG.big):rnd(CFG.small)),shown:o.c.map(()=>false)}});
-  T={...t,paths,clicks:[],leaders:[],t0:performance.now(),tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,away:[],awayStart:null};
-  phase='plan';render();status();
+  T={...t,paths,clicks:[],leaders:[],t0:null,tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,away:[],awayStart:null};
+  phase='card';render();status();msg.textContent='Get ready…';
+  $('doneBtn').classList.remove('hide');$('doneBtn').disabled=true;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
+  const card=$('card'),cp=$('cardPrice');cp.textContent=t.cost+(t.cost===1?' point':' points');cp.style.color=t.cost===CFG.costs[0]?'var(--sky)':'var(--pink)';
+  $('cardDl').textContent=t.deadline?`You'll have ${CFG.deadlineMs/1000} seconds to look.`:'No time limit this round.';card.classList.add('on');
+  timers.push(setTimeout(()=>{card.classList.remove('on');startPlan()},CFG.cardMs));
+}
+function startPlan(){
+  const t=trials[ti];T.t0=performance.now();phase='plan';render();$('doneBtn').disabled=false;
   const prac=t.block==='practice'?'Practice. ':'';
   msg.textContent=prac+(t.deadline?`Time limit: ${CFG.deadlineMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.';
-  $('doneBtn').classList.remove('hide');$('doneBtn').disabled=false;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
   if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+CFG.deadlineMs;
     const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.deadlineMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
     timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent='Time\'s up! Click any stop on the path you want.'}},CFG.deadlineMs))}
@@ -172,7 +180,7 @@ function render(hover){
   let h='';const W=(2*CFG.R+1)*S;
   for(let i=0;i<=2*CFG.R+1;i++)h+=`<line x1="${i*S}" y1="0" x2="${i*S}" y2="${W}" stroke="var(--line)" opacity=".35"/><line x1="0" y1="${i*S}" x2="${W}" y2="${i*S}" stroke="var(--line)" opacity=".35"/>`;
   const st=px([0,0]);
-  if(phase==='plan'||phase==='choose'||phase==='feedback'){
+  if(phase==='card'||phase==='plan'||phase==='choose'||phase==='feedback'){
     LEVELS.forEach(n=>{const p=T.paths[n],pts=[st,...p.cells.map(px)].map(q=>q.join(',')).join(' '),hi=hover===n||(phase==='feedback'&&T.chosen===n);
       h+=`<polyline points="${pts}" fill="none" stroke="${hi?'var(--sky)':'var(--line)'}" stroke-width="${hi?7:4}" stroke-linecap="round" stroke-linejoin="round"/>`});
     LEVELS.forEach(n=>{const p=T.paths[n];p.cells.forEach((c,i)=>{const [x,y]=px(c),show=p.shown[i]||phase==='feedback',v=p.vals[i];
