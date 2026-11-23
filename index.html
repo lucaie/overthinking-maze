@@ -37,7 +37,8 @@ p{color:var(--soft);margin:0 0 12px;max-width:65ch}
 .timer i{display:block;height:100%;width:100%;background:var(--pink)}
 .board{background:var(--panel);border-radius:14px;padding:8px;position:relative}
 .card{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;border-radius:14px;background:var(--panel);text-align:center;padding:20px}
-.card.on{display:flex}.card .big{font-size:clamp(40px,10vw,72px);font-weight:700;line-height:1}.card .sub{color:var(--soft);font-size:18px}
+.card.on{display:flex}
+@media (prefers-reduced-motion:no-preference){.pulse{animation:pl 1s ease-in-out infinite;transform-box:fill-box;transform-origin:center}@keyframes pl{50%{transform:scale(1.15)}}}.card .big{font-size:clamp(40px,10vw,72px);font-weight:700;line-height:1}.card .sub{color:var(--soft);font-size:18px}
 svg{display:block;width:100%;height:auto;touch-action:manipulation}
 .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
 button{font:600 16px "Hanken Grotesk",sans-serif;min-height:44px;padding:0 20px;border-radius:10px;border:0;background:var(--sky);color:#0a2540;cursor:pointer}
@@ -113,7 +114,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={version:'v2.5',choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
+const CFG={version:'v2.6',choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
   small:[-8,-4,4,8],big:[-48,-24,24,48],
   bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
 const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
@@ -183,7 +184,7 @@ function newTrial(){
   $('doneBtn').classList.remove('hide');$('doneBtn').disabled=true;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
   const card=$('card'),cp=$('cardPrice');cp.textContent=t.cost+(t.cost===1?' point':' points');cp.style.color=t.cost===CFG.costs[0]?'var(--sky)':'var(--pink)';
   $('cardDl').textContent=t.deadline?`You'll have ${CFG.deadlineMs/1000} seconds to look.`:'No time limit this round.';card.classList.add('on');
-  timers.push(setTimeout(()=>{card.classList.remove('on');startPlan()},CFG.cardMs));
+  timers.push(setTimeout(()=>{card.classList.remove('on');T.tCardEnd=performance.now();phase='ready';render();msg.textContent='Click the start square to begin the round.'},CFG.cardMs));
 }
 function startPlan(){
   const t=trials[ti];T.t0=performance.now();phase='plan';render();$('doneBtn').disabled=false;
@@ -212,7 +213,7 @@ function render(hover){
     h+=`<polyline points="${[st,...T.walkCells.map(px)].map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--sky)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
     T.walkCells.forEach(c=>{const [x,y]=px(c);h+=`<circle cx="${x}" cy="${y}" r="8" fill="var(--sky)"/>`});
   }
-  if(phase!=='hide')h+=`<rect x="${st[0]-18}" y="${st[1]-18}" width="36" height="36" rx="8" fill="var(--pink)"/><text x="${st[0]}" y="${st[1]+4}" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2540">start</text>`;
+  if(phase!=='hide')h+=`<rect data-start="1" class="${phase==='ready'?'pulse':''}" style="cursor:${phase==='ready'?'pointer':'default'}" x="${st[0]-18}" y="${st[1]-18}" width="36" height="36" rx="8" fill="var(--pink)"/><text x="${st[0]}" y="${st[1]+4}" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2540" pointer-events="none">start</text>`;
   svg.innerHTML=h;
 }
 
@@ -220,6 +221,7 @@ function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CF
   const c=$('sCost');c.textContent=T.cost+' pt';c.className='price '+(T.cost===CFG.costs[0]?'cheap':'dear');$('sPaid').textContent=T.clicks.length*T.cost;$('sTotal').textContent=total}
 
 svg.addEventListener('click',e=>{
+  if(phase==='ready'&&e.target.closest('[data-start]')){T.tReady=performance.now();startPlan();return}
   const g=e.target.closest('g[data-p]');if(!g)return;const n=g.dataset.p,i=+g.dataset.i,p=T.paths[n];
   if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());render();status();pop(p.cells[i],T.cost)}
   else if(phase==='choose'){T.chosen=n;T.tChoice=performance.now();clearTimers();startHide()}
@@ -264,7 +266,7 @@ function finish(){
   Object.assign(row,{node_values:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].vals]))),path_cells:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].cells]))),
     n_clicks:T.clicks.length,clicks:JSON.stringify(T.clicks),leader_after_each_click:JSON.stringify(T.leaders),
     time_first_click_ms:T.clicks.length?T.clicks[0].t:'',inter_click_ms:JSON.stringify(ic),
-    planning_time_ms:Math.round(T.tDone-T.t0),choice_time_ms:Math.round(T.tChoice-T.tDone),
+    start_wait_ms:T.tReady&&T.tCardEnd?Math.round(T.tReady-T.tCardEnd):'',planning_time_ms:Math.round(T.tDone-T.t0),choice_time_ms:Math.round(T.tChoice-T.tDone),
     chosen_path:T.chosen||'',chosen_nats:p?+p.nats.toFixed(3):'',best_path:best,chose_best:T.chosen===best,
     walk_keys:JSON.stringify(T.walk),walk_correct:p?!err:'',first_error_step:err||'',
     away_ms:awayMs,away_events:JSON.stringify(T.away),path_reward:reward,paid_for_clicks:paid,score});
