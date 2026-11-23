@@ -70,6 +70,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
     <p class="note">6 practice rounds (4 without and 2 with a time limit), then 24 real rounds in two parts (with and without a time limit). About 15 minutes. Please stay on this page while playing. Your data appears at the end to copy.</p>
     <div class="row"><input type="text" id="pid" placeholder="Your initials or nickname" aria-label="Player ID"><button id="startBtn">Start practice</button><button id="demoBtn" class="ghost">Try a demo (nothing saved)</button></div>
     <p class="note" id="introNote"></p>
+    <p class="note" id="verNote"></p>
   </section>
 
   <section id="game" class="hide">
@@ -324,7 +325,7 @@ function exitDemo(note){clearTimers();phase='intro';demo=false;T=null;log=[];$('
   $('game').classList.add('hide');$('intro').classList.remove('hide');$('saved').classList.remove('hide');refreshPanel();$('introNote').textContent=note||''}
 $('demoBtn').onclick=startDemo;$('exitBtn').onclick=()=>exitDemo('Demo exited. Nothing was saved.');
 function start(){demo=false;dlMs=12000;naturalMs='';$('exitBtn').classList.add('hide');$('introNote').textContent='';pid=($('pid').value||'anon').trim().slice(0,30);sessionId=new Date().toISOString();$('saved').classList.add('hide');buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
-$('startBtn').onclick=start;$('againBtn').onclick=start;refreshPanel();
+$('startBtn').onclick=start;$('againBtn').onclick=start;refreshPanel();$('verNote').textContent='Game version '+CFG.version;
 }
 </script>
 </body>
