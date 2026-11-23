@@ -65,10 +65,11 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
   <section id="intro">
     <h1>The memory maze</h1>
     <p>Each round shows <b>three paths</b> from the start square. Every stop hides some points, usually small, but <b>one stop on each path hides a big amount</b> (good or bad, up to ±48), and it can be anywhere along the path.</p>
-    <p>You can <b>click a stop to reveal its points, but each click costs you</b>. The price changes from round to round and is shown at the top. Before each round, the price is shown for 3 seconds. Some rounds also have a <b>12-second time limit</b> for looking, then 5 seconds to pick.</p>
+    <p>You can <b>click a stop to reveal its points, but each click costs you</b>. The price changes from round to round and is shown at the top. Before each round, the price is shown for 3 seconds. Some rounds also have a <b>time limit</b> for looking, set from how long you take in the practice rounds, then 5 seconds to pick.</p>
     <p>When you've seen enough, pick a path. Then the maze disappears and you <b>walk your path from memory</b> with the arrow keys (6 steps). Walk it correctly and you get its points minus your click costs. Make a mistake and you only pay for the clicks.</p>
-    <p class="note">4 practice rounds, then 24 real rounds in two parts (with and without a time limit). About 15 minutes. Please stay on this page while playing. Your data appears at the end to copy.</p>
-    <div class="row"><input type="text" id="pid" placeholder="Your initials or nickname" aria-label="Player ID"><button id="startBtn">Start practice</button></div>
+    <p class="note">6 practice rounds (4 without and 2 with a time limit), then 24 real rounds in two parts (with and without a time limit). About 15 minutes. Please stay on this page while playing. Your data appears at the end to copy.</p>
+    <div class="row"><input type="text" id="pid" placeholder="Your initials or nickname" aria-label="Player ID"><button id="startBtn">Start practice</button><button id="demoBtn" class="ghost">Try a demo (nothing saved)</button></div>
+    <p class="note" id="introNote"></p>
   </section>
 
   <section id="game" class="hide">
@@ -86,6 +87,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
     <aside class="side right">
       <button id="doneBtn">I'm done looking: pick a path</button>
       <button id="nextBtn" class="hide">Next round</button>
+      <button id="exitBtn" class="ghost hide">Exit demo</button>
       <div class="pad" id="pad">
         <span></span><button data-k="ArrowUp" aria-label="Up">↑</button><span></span>
         <button data-k="ArrowLeft" aria-label="Left">←</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="ArrowRight" aria-label="Right">→</button>
@@ -114,7 +116,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={version:'v2.6',choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
+const CFG={version:'v2.7',practiceFree:4,practiceTimed:2,dlFrac:0.6,dlMin:5000,dlMax:15000,demoDeadline:8000,choiceMs:5000,pairs:10,fillers:2,cardMs:3000,steps:6,practice:6,perBlock:12,costs:[2,4],deadlineMs:12000,hideMs:2500,R:6,
   small:[-8,-4,4,8],big:[-48,-24,24,48],
   bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
 const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
@@ -153,13 +155,14 @@ function genPaths(){
   return null;
 }
 
-let trials=[],ti=0,T=null,total=0,log=[],phase='intro',timers=[],raf=null,pid='',sessionId='';
+let dlMs=12000,naturalMs='',demo=false,trials=[],ti=0,T=null,total=0,log=[],phase='intro',timers=[],raf=null,pid='',sessionId='';
 
 function buildTrials(){
   // practice: fresh mazes. Real: each of CFG.pairs problems appears once per block (same paths and rewards,
   // different rotation/mirror, same click price), plus unpaired fillers in each block.
   trials=[];const mix=n=>shuffle(Array.from({length:n},(_,i)=>CFG.costs[i%2]));
-  mix(CFG.practice).forEach((c,i)=>trials.push({block:'practice',cost:c,deadline:i>=CFG.practice/2,prob:makeProblem('practice'+(i+1)),xf:[0,false]}));
+  mix(CFG.practiceFree).forEach((c,i)=>trials.push({block:'practice',cost:c,deadline:false,prob:makeProblem('practice'+(i+1)),xf:[0,false]}));
+  mix(CFG.practiceTimed).forEach((c,i)=>trials.push({block:'practice',cost:c,deadline:true,prob:makeProblem('practice'+(CFG.practiceFree+i+1)),xf:[0,false]}));
   const costs=mix(CFG.pairs),probs=costs.map((c,i)=>({...makeProblem('P'+(i+1)),cost:c}));
   const xfs=probs.map(()=>shuffle(Array.from({length:8},(_,k)=>[k%4,k>=4])).slice(0,2));
   shuffle([false,true]).forEach((dl,b)=>{
@@ -183,16 +186,16 @@ function newTrial(){
   phase='card';render();status();msg.textContent='Get ready…';
   $('doneBtn').classList.remove('hide');$('doneBtn').disabled=true;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
   const card=$('card'),cp=$('cardPrice');cp.textContent=t.cost+(t.cost===1?' point':' points');cp.style.color=t.cost===CFG.costs[0]?'var(--sky)':'var(--pink)';
-  $('cardDl').textContent=t.deadline?`You'll have ${CFG.deadlineMs/1000} seconds to look.`:'No time limit this round.';card.classList.add('on');
+  $('cardDl').textContent=t.deadline?`You'll have ${dlMs/1000} seconds to look.`:'No time limit this round.';card.classList.add('on');
   timers.push(setTimeout(()=>{card.classList.remove('on');T.tCardEnd=performance.now();phase='ready';render();msg.textContent='Click the start square to begin the round.'},CFG.cardMs));
 }
 function startPlan(){
   const t=trials[ti];T.t0=performance.now();phase='plan';render();$('doneBtn').disabled=false;
   const prac=t.block==='practice'?'Practice. ':'';
-  msg.textContent=prac+(t.deadline?`Time limit: ${CFG.deadlineMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.'+(t.deadline?` Then you have ${CFG.choiceMs/1000} s to pick.`:'');
-  if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+CFG.deadlineMs;
-    const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.deadlineMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
-    timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent=`Time's up! Pick a path within ${CFG.choiceMs/1000} s.`}},CFG.deadlineMs))}
+  msg.textContent=prac+(t.deadline?`Time limit: ${dlMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.'+(t.deadline?` Then you have ${CFG.choiceMs/1000} s to pick.`:'');
+  if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+dlMs;
+    const tick=()=>{const f=Math.max(0,(end-performance.now())/dlMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
+    timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent=`Time's up! Pick a path within ${CFG.choiceMs/1000} s.`}},dlMs))}
 }
 
 const px=([x,y])=>[(x+CFG.R)*S+S/2,(y+CFG.R)*S+S/2];
@@ -217,7 +220,7 @@ function render(hover){
   svg.innerHTML=h;
 }
 
-function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CFG.practice+1)+' / '+(trials.length-CFG.practice);
+function status(){$('sRound').textContent=demo?'demo '+(ti+1)+' / '+trials.length:T.block==='practice'?'practice':(ti-CFG.practice+1)+' / '+(trials.length-CFG.practice);
   const c=$('sCost');c.textContent=T.cost+' pt';c.className='price '+(T.cost===CFG.costs[0]?'cheap':'dear');$('sPaid').textContent=T.clicks.length*T.cost;$('sTotal').textContent=total}
 
 svg.addEventListener('click',e=>{
@@ -261,7 +264,7 @@ function finish(){
   const reward=p?sums[LEVELS.indexOf(T.chosen)]:0,paid=T.clicks.length*T.cost,score=(p&&!err?reward:0)-paid;
   if(T.block!=='practice')total+=score;
   const ic=T.clicks.map((c,i)=>i?c.t-T.clicks[i-1].t:c.t),awayMs=T.away.reduce((s,a)=>s+a.to-a.from,0);
-  const row={player:pid,session:sessionId,version:CFG.version,round:ti+1,block:T.block,problem_id:T.prob.id,copy:T.copy||'',rotation:T.xf[0],mirrored:T.xf[1],click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut,froze:T.froze};
+  const row={player:pid,session:sessionId,version:CFG.version,round:ti+1,block:T.block,problem_id:T.prob.id,copy:T.copy||'',rotation:T.xf[0],mirrored:T.xf[1],click_cost:T.cost,deadline:T.deadline,deadline_ms:T.deadline?dlMs:'',natural_plan_ms:naturalMs,timed_out:T.timedOut,froze:T.froze};
   LEVELS.forEach((n,i)=>{const q=T.paths[n];row['reward_'+n]=sums[i];row['nats_'+n]=+q.nats.toFixed(3);row['acts_'+n]=q.acts;row['bigpos_'+n]=q.bigAt+1});
   Object.assign(row,{node_values:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].vals]))),path_cells:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].cells]))),
     n_clicks:T.clicks.length,clicks:JSON.stringify(T.clicks),leader_after_each_click:JSON.stringify(T.leaders),
@@ -270,13 +273,17 @@ function finish(){
     chosen_path:T.chosen||'',chosen_nats:p?+p.nats.toFixed(3):'',best_path:best,chose_best:T.chosen===best,
     walk_keys:JSON.stringify(T.walk),walk_correct:p?!err:'',first_error_step:err||'',
     away_ms:awayMs,away_events:JSON.stringify(T.away),path_reward:reward,paid_for_clicks:paid,score});
-  log.push(row);saveRow(row);
+  log.push(row);if(!demo)saveRow(row);
   phase='feedback';render();$('pad').classList.remove('on');status();
   msg.textContent=T.froze?`No path picked in time, so no path points. You paid ${paid}. Round score: ${score}.`:((err?`Wrong step at ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. `+(T.chosen===best?'You picked the best path.':'The highlighted path wasn\'t the best one.'));
   $('nextBtn').classList.remove('hide');$('nextBtn').focus();
 }
 
-$('nextBtn').onclick=()=>{ti++;if(ti>=trials.length)return end();newTrial()};
+function calibrate(){const pr=log.filter(r=>r.block==='practice'&&!r.deadline).map(r=>r.planning_time_ms).sort((a,b)=>a-b);
+  if(!pr.length)return;const m=pr.length%2?pr[(pr.length-1)/2]:(pr[pr.length/2-1]+pr[pr.length/2])/2;naturalMs=Math.round(m);
+  dlMs=Math.round(Math.min(CFG.dlMax,Math.max(CFG.dlMin,CFG.dlFrac*m))/500)*500}
+$('nextBtn').onclick=()=>{ti++;if(ti>=trials.length)return demo?exitDemo('Demo finished. Nothing was saved.'):end();
+  if(!demo&&ti===CFG.practiceFree)calibrate();newTrial()};
 
 const STORE='overthinking_maze_log';
 function loadStore(){try{return JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){return null}}
@@ -308,7 +315,14 @@ function end(){
 }
 
 $('copyBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('csv').value);$('copied').textContent='Copied.'}catch(e){$('csv').select();$('copied').textContent='Press Ctrl/Cmd+C to copy the selected text.'}};
-function start(){pid=($('pid').value||'anon').trim().slice(0,30);sessionId=new Date().toISOString();$('saved').classList.add('hide');buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
+function startDemo(){demo=true;pid='demo';sessionId='';log=[];total=0;ti=0;dlMs=CFG.demoDeadline;
+  trials=[{block:'practice',cost:CFG.costs[0],deadline:false},{block:'practice',cost:CFG.costs[1],deadline:true},{block:'practice',cost:CFG.costs[1],deadline:false}]
+    .map((t,i)=>({...t,prob:makeProblem('demo'+(i+1)),xf:[0,false]}));
+  $('exitBtn').classList.remove('hide');$('intro').classList.add('hide');$('saved').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
+function exitDemo(note){clearTimers();phase='intro';demo=false;T=null;log=[];$('exitBtn').classList.add('hide');$('card').classList.remove('on');$('pad').classList.remove('on');
+  $('game').classList.add('hide');$('intro').classList.remove('hide');$('saved').classList.remove('hide');refreshPanel();$('introNote').textContent=note||''}
+$('demoBtn').onclick=startDemo;$('exitBtn').onclick=()=>exitDemo('Demo exited. Nothing was saved.');
+function start(){demo=false;dlMs=12000;naturalMs='';$('exitBtn').classList.add('hide');$('introNote').textContent='';pid=($('pid').value||'anon').trim().slice(0,30);sessionId=new Date().toISOString();$('saved').classList.add('hide');buildTrials();ti=0;total=0;log=[];$('intro').classList.add('hide');$('end').classList.add('hide');$('game').classList.remove('hide');newTrial()}
 $('startBtn').onclick=start;$('againBtn').onclick=start;refreshPanel();
 }
 </script>
