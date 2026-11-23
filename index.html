@@ -103,7 +103,7 @@ textarea{width:100%;height:160px;background:var(--panel);color:var(--ink);border
 
 <script>
 {
-const CFG={version:'v2.3',cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
+const CFG={version:'v2.4',choiceMs:3000,cardMs:3000,steps:6,practice:4,perBlock:12,costs:[1,3],deadlineMs:12000,hideMs:2500,R:6,
   small:[-8,-4,4,8],big:[-48,-24,24,48],
   bands:[[0.4,0.55],[0.6,0.95],[1.0,1.2]]};
 const LEVELS=['low','mid','high'], S=40, $=id=>document.getElementById(id), svg=$('svg'), msg=$('msg');
@@ -156,7 +156,7 @@ function newTrial(){
   clearTimers();const t=trials[ti],g=genPaths(),paths={};
   g.forEach((o,i)=>{const bigAt=Math.floor(Math.random()*CFG.steps);
     paths[LEVELS[i]]={cells:o.c,acts:acts(o.c),nats:o.n,bigAt,vals:o.c.map((_,d)=>d===bigAt?rnd(CFG.big):rnd(CFG.small)),shown:o.c.map(()=>false)}});
-  T={...t,paths,clicks:[],leaders:[],t0:null,tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,away:[],awayStart:null};
+  T={...t,paths,clicks:[],leaders:[],t0:null,tDone:null,tChoice:null,chosen:null,walk:[],walkCells:[],timedOut:false,froze:false,away:[],awayStart:null};
   phase='card';render();status();msg.textContent='Get ready…';
   $('doneBtn').classList.remove('hide');$('doneBtn').disabled=true;$('nextBtn').classList.add('hide');$('pad').classList.remove('on');
   const card=$('card'),cp=$('cardPrice');cp.textContent=t.cost+(t.cost===1?' point':' points');cp.style.color=t.cost===CFG.costs[0]?'var(--sky)':'var(--pink)';
@@ -166,10 +166,10 @@ function newTrial(){
 function startPlan(){
   const t=trials[ti];T.t0=performance.now();phase='plan';render();$('doneBtn').disabled=false;
   const prac=t.block==='practice'?'Practice. ':'';
-  msg.textContent=prac+(t.deadline?`Time limit: ${CFG.deadlineMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.';
+  msg.textContent=prac+(t.deadline?`Time limit: ${CFG.deadlineMs/1000} s to look. `:'')+'Click stops to reveal points, then press the button to choose.'+(t.deadline?` Then you have ${CFG.choiceMs/1000} s to pick.`:'');
   if(t.deadline){$('timer').style.visibility='visible';const end=T.t0+CFG.deadlineMs;
     const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.deadlineMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='plan')raf=requestAnimationFrame(tick)};tick();
-    timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent='Time\'s up! Click any stop on the path you want.'}},CFG.deadlineMs))}
+    timers.push(setTimeout(()=>{if(phase==='plan'){T.timedOut=true;toChoose();msg.textContent=`Time's up! Pick a path within ${CFG.choiceMs/1000} s.`}},CFG.deadlineMs))}
 }
 
 const px=([x,y])=>[(x+CFG.R)*S+S/2,(y+CFG.R)*S+S/2];
@@ -200,14 +200,17 @@ function status(){$('sRound').textContent=T.block==='practice'?'practice':(ti-CF
 svg.addEventListener('click',e=>{
   const g=e.target.closest('g[data-p]');if(!g)return;const n=g.dataset.p,i=+g.dataset.i,p=T.paths[n];
   if(phase==='plan'&&!p.shown[i]){p.shown[i]=true;T.clicks.push({node:n+(i+1),value:p.vals[i],t:Math.round(performance.now()-T.t0)});T.leaders.push(leader());render();status();pop(p.cells[i],T.cost)}
-  else if(phase==='choose'){T.chosen=n;T.tChoice=performance.now();startHide()}
+  else if(phase==='choose'){T.chosen=n;T.tChoice=performance.now();clearTimers();startHide()}
 });
 svg.addEventListener('mousemove',e=>{if(phase!=='choose')return;const g=e.target.closest('g[data-p]');render(g?g.dataset.p:null)});
 
 function pop(c,cost){const [x,y]=px(c),t=document.createElementNS('http://www.w3.org/2000/svg','text');
   t.setAttribute('x',x+14);t.setAttribute('y',y-14);t.setAttribute('class','pop');t.textContent='\u2212'+cost;svg.appendChild(t);
   timers.push(setTimeout(()=>t.remove(),900))}
-function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();$('doneBtn').disabled=true;render()}
+function toChoose(){phase='choose';T.tDone=performance.now();clearTimers();$('doneBtn').disabled=true;render();
+  if(T.deadline){$('timer').style.visibility='visible';const end=T.tDone+CFG.choiceMs;
+    const tick=()=>{const f=Math.max(0,(end-performance.now())/CFG.choiceMs);$('bar').style.width=(f*100)+'%';if(f>0&&phase==='choose')raf=requestAnimationFrame(tick)};tick();
+    timers.push(setTimeout(()=>{if(phase==='choose'){T.froze=true;T.tChoice=performance.now();finish()}},CFG.choiceMs))}}
 $('doneBtn').onclick=()=>{if(phase!=='plan')return;toChoose();msg.textContent='Click any stop on the path you want.'};
 
 function startHide(){phase='hide';render();$('doneBtn').classList.add('hide');msg.textContent='Remember your path…';
@@ -228,24 +231,24 @@ window.addEventListener('blur',goneAway);window.addEventListener('focus',cameBac
 document.addEventListener('visibilitychange',()=>document.hidden?goneAway():cameBack());
 
 function finish(){
-  cameBack();const p=T.paths[T.chosen];let err=null;
-  for(let i=0;i<CFG.steps;i++)if(key(T.walkCells[i])!==key(p.cells[i])){err=i+1;break}
+  cameBack();clearTimers();const p=T.froze?null:T.paths[T.chosen];let err=null;
+  if(p)for(let i=0;i<CFG.steps;i++)if(key(T.walkCells[i])!==key(p.cells[i])){err=i+1;break}
   const sums=LEVELS.map(n=>T.paths[n].vals.reduce((a,b)=>a+b,0)),best=LEVELS[sums.indexOf(Math.max(...sums))];
-  const reward=sums[LEVELS.indexOf(T.chosen)],paid=T.clicks.length*T.cost,score=(err?0:reward)-paid;
+  const reward=p?sums[LEVELS.indexOf(T.chosen)]:0,paid=T.clicks.length*T.cost,score=(p&&!err?reward:0)-paid;
   if(T.block!=='practice')total+=score;
   const ic=T.clicks.map((c,i)=>i?c.t-T.clicks[i-1].t:c.t),awayMs=T.away.reduce((s,a)=>s+a.to-a.from,0);
-  const row={player:pid,session:sessionId,version:CFG.version,round:ti+1,block:T.block,click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut};
+  const row={player:pid,session:sessionId,version:CFG.version,round:ti+1,block:T.block,click_cost:T.cost,deadline:T.deadline,timed_out:T.timedOut,froze:T.froze};
   LEVELS.forEach((n,i)=>{const q=T.paths[n];row['reward_'+n]=sums[i];row['nats_'+n]=+q.nats.toFixed(3);row['acts_'+n]=q.acts;row['bigpos_'+n]=q.bigAt+1});
   Object.assign(row,{node_values:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].vals]))),path_cells:JSON.stringify(Object.fromEntries(LEVELS.map(n=>[n,T.paths[n].cells]))),
     n_clicks:T.clicks.length,clicks:JSON.stringify(T.clicks),leader_after_each_click:JSON.stringify(T.leaders),
     time_first_click_ms:T.clicks.length?T.clicks[0].t:'',inter_click_ms:JSON.stringify(ic),
     planning_time_ms:Math.round(T.tDone-T.t0),choice_time_ms:Math.round(T.tChoice-T.tDone),
-    chosen_path:T.chosen,chosen_nats:+p.nats.toFixed(3),best_path:best,chose_best:T.chosen===best,
-    walk_keys:JSON.stringify(T.walk),walk_correct:!err,first_error_step:err||'',
+    chosen_path:T.chosen||'',chosen_nats:p?+p.nats.toFixed(3):'',best_path:best,chose_best:T.chosen===best,
+    walk_keys:JSON.stringify(T.walk),walk_correct:p?!err:'',first_error_step:err||'',
     away_ms:awayMs,away_events:JSON.stringify(T.away),path_reward:reward,paid_for_clicks:paid,score});
   log.push(row);saveRow(row);
   phase='feedback';render();$('pad').classList.remove('on');status();
-  msg.textContent=(err?`Wrong step at ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. `+(T.chosen===best?'You picked the best path.':'The highlighted path wasn\'t the best one.');
+  msg.textContent=T.froze?`No path picked in time, so no path points. You paid ${paid}. Round score: ${score}.`:((err?`Wrong step at ${err}, so no path points.`:`Correct walk! Path worth ${reward>0?'+':''}${reward}.`)+` You paid ${paid}. Round score: ${score}. `+(T.chosen===best?'You picked the best path.':'The highlighted path wasn\'t the best one.'));
   $('nextBtn').classList.remove('hide');$('nextBtn').focus();
 }
 
@@ -275,7 +278,7 @@ function end(){
   clearTimers();phase='end';$('game').classList.add('hide');$('end').classList.remove('hide');$('saved').classList.remove('hide');refreshPanel();$('savedSel').value=pid;
   const real=log.filter(r=>r.block!=='practice'),mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
   const conds=[];[false,true].forEach(dl=>CFG.costs.forEach(c=>conds.push({dl,c})));
-  $('sumBody').innerHTML=conds.map(({dl,c})=>{const r=real.filter(x=>x.click_cost===c&&x.deadline===dl);return `<tr><td>${c} pt, ${dl?'time limit':'no limit'}</td><td>${mean(r.map(x=>x.n_clicks)).toFixed(1)}</td><td>${(mean(r.map(x=>x.planning_time_ms))/1000).toFixed(1)}</td><td>${Math.round(100*mean(r.map(x=>+x.chose_best)))}%</td><td>${Math.round(100*mean(r.map(x=>+x.walk_correct)))}%</td><td>${mean(r.map(x=>x.score)).toFixed(1)}</td></tr>`}).join('');
+  $('sumBody').innerHTML=conds.map(({dl,c})=>{const r=real.filter(x=>x.click_cost===c&&x.deadline===dl);return `<tr><td>${c} pt, ${dl?'time limit':'no limit'}</td><td>${mean(r.map(x=>x.n_clicks)).toFixed(1)}</td><td>${(mean(r.map(x=>x.planning_time_ms))/1000).toFixed(1)}</td><td>${Math.round(100*mean(r.map(x=>+x.chose_best)))}%</td><td>${Math.round(100*mean(r.filter(x=>x.walk_correct!=='').map(x=>+x.walk_correct)))}%</td><td>${mean(r.map(x=>x.score)).toFixed(1)}</td></tr>`}).join('');
   const cols=Object.keys(log[0]),esc=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   $('csv').value=[cols.join(','),...log.map(r=>cols.map(c=>esc(r[c])).join(','))].join('\n');
 }
