@@ -7,7 +7,7 @@ The design is Mouselab-MDP style (Callaway, Lieder, Krueger & Griffiths, 2017) w
 - **Computation:** clicks that reveal hidden rewards (each click costs points), plus planning time.
 - **Policy complexity (memory):** the chosen path must be walked from memory. Its cost is the turn-coded policy complexity *I(S;A)* in nats.
 
-Current version: **v2.8** (`index.html`).
+Current version: **v2.8** (`index.html`). The game can be played at https://lucaie.github.io/overthinking-maze/
 
 ## One round
 1. **Price card (3 s):** shows this round's click price (2 or 4 pt) and whether there's a time limit.
